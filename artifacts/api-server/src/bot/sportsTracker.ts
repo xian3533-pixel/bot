@@ -108,6 +108,10 @@ export async function fetchScores(leagueKey: string): Promise<EmbedBuilder | nul
 
 // Per-league independent timers
 const leagueTimers = new Map<string, ReturnType<typeof setInterval>>();
+// Pending stagger timeouts (cancelled on stop)
+const staggerTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
+
+const STAGGER_SECONDS = 30;
 
 async function postLeagueScores(client: Client, leagueKey: string): Promise<void> {
   const settings = getSettings();
@@ -138,6 +142,11 @@ export function startLeague(client: Client, leagueKey: string, intervalMinutes: 
 }
 
 export function stopLeague(leagueKey: string): void {
+  const pending = staggerTimeouts.get(leagueKey);
+  if (pending) {
+    clearTimeout(pending);
+    staggerTimeouts.delete(leagueKey);
+  }
   const timer = leagueTimers.get(leagueKey);
   if (timer) {
     clearInterval(timer);
@@ -147,7 +156,7 @@ export function stopLeague(leagueKey: string): void {
 }
 
 export function stopAllLeagues(): void {
-  for (const [key] of leagueTimers) {
+  for (const [key] of [...leagueTimers.keys(), ...staggerTimeouts.keys()]) {
     stopLeague(key);
   }
 }
@@ -164,21 +173,35 @@ export function getActiveLeagues(): string[] {
   return [...leagueTimers.keys()];
 }
 
+function scheduleLeaguesStaggered(
+  client: Client,
+  entries: [string, { channelId: string; intervalMinutes: number }][]
+): void {
+  entries.forEach(([leagueKey, config], index) => {
+    const delayMs = index * STAGGER_SECONDS * 1000;
+    if (delayMs === 0) {
+      startLeague(client, leagueKey, config.intervalMinutes);
+    } else {
+      const t = setTimeout(() => {
+        staggerTimeouts.delete(leagueKey);
+        startLeague(client, leagueKey, config.intervalMinutes);
+      }, delayMs);
+      staggerTimeouts.set(leagueKey, t);
+      logger.info({ leagueKey, delaySeconds: index * STAGGER_SECONDS }, "League scheduled with stagger");
+    }
+  });
+}
+
 export async function initSportsTracker(client: Client): Promise<void> {
   const settings = getSettings();
   if (!settings.sportsActive) return;
-
-  for (const [leagueKey, config] of Object.entries(settings.sportsLeagues)) {
-    startLeague(client, leagueKey, config.intervalMinutes);
-  }
+  scheduleLeaguesStaggered(client, Object.entries(settings.sportsLeagues));
 }
 
 export async function startAllLeagues(client: Client): Promise<void> {
   const settings = getSettings();
   await setSportsActive(true);
-  for (const [leagueKey, config] of Object.entries(settings.sportsLeagues)) {
-    startLeague(client, leagueKey, config.intervalMinutes);
-  }
+  scheduleLeaguesStaggered(client, Object.entries(settings.sportsLeagues));
 }
 
 export async function stopAllLeaguesAndSave(): Promise<void> {
