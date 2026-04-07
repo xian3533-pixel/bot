@@ -38,13 +38,6 @@ export const data = new SlashCommandBuilder()
       .setDescription("Channel for server rules")
       .addChannelTypes(ChannelType.GuildText)
       .setRequired(false)
-  )
-  .addChannelOption((opt) =>
-    opt
-      .setName("sports")
-      .setDescription("Channel for sports scores and updates")
-      .addChannelTypes(ChannelType.GuildText)
-      .setRequired(false)
   );
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -52,13 +45,12 @@ const FEATURE_LABELS: Record<string, string> = {
   meme: "😂 Meme Spam Channel",
   announcements: "📢 Announcements Channel",
   rules: "📋 Rules Channel",
-  sports: "🏆 Sports Scores Channel",
 };
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
-  const features = ["media", "meme", "announcements", "rules", "sports"] as const;
+  const features = ["media", "meme", "announcements", "rules"] as const;
   const updates: { feature: string; channelId: string }[] = [];
 
   for (const feature of features) {
@@ -71,7 +63,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   if (updates.length === 0) {
     await interaction.editReply(
-      "You didn't provide any channels. Use at least one option, e.g. `/setchannel media:#your-channel`."
+      "You didn't provide any channels. Use at least one option, e.g. `/setchannel media:#your-channel`.\n\nFor sports channels, use `/sports setchannel` instead."
     );
     return;
   }

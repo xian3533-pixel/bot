@@ -2,10 +2,28 @@
   "channels": {
     "media": "1484063220183466021",
     "meme": "1484063220183466022",
-    "rules": "1484063220036534308"
+    "rules": "1484063220036534308",
+    "sports": "1490561501143109732"
   },
   "memeSpam": {
     "active": true,
     "intervalMinutes": 30
+  },
+  "sportsTracker": {
+    "active": true,
+    "intervalMinutes": 30,
+    "leagues": [
+      "nfl",
+      "nba",
+      "ncaab",
+      "ncaaf",
+      "mlb",
+      "mls",
+      "epl",
+      "laliga",
+      "bundesliga",
+      "seriea",
+      "ucl"
+    ]
   }
 }

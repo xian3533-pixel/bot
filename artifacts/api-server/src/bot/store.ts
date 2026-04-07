@@ -8,7 +8,6 @@ interface BotSettings {
     meme?: string;
     announcements?: string;
     rules?: string;
-    sports?: string;
   };
   memeSpam: {
     active: boolean;
@@ -17,7 +16,7 @@ interface BotSettings {
   sportsTracker: {
     active: boolean;
     intervalMinutes: number;
-    leagues: string[];
+    channels: Record<string, string>; // leagueKey -> channelId
   };
 }
 
@@ -32,7 +31,7 @@ let settings: BotSettings = {
   sportsTracker: {
     active: false,
     intervalMinutes: 30,
-    leagues: ["nba", "nfl", "mlb", "nhl"],
+    channels: {},
   },
 };
 
@@ -46,7 +45,14 @@ export async function loadSettings(): Promise<void> {
         ...parsed,
         channels: { ...settings.channels, ...parsed.channels },
         memeSpam: { ...settings.memeSpam, ...parsed.memeSpam },
-        sportsTracker: { ...settings.sportsTracker, ...parsed.sportsTracker },
+        sportsTracker: {
+          ...settings.sportsTracker,
+          ...parsed.sportsTracker,
+          channels: {
+            ...settings.sportsTracker.channels,
+            ...(parsed.sportsTracker?.channels ?? {}),
+          },
+        },
       };
     }
   } catch {
@@ -72,8 +78,18 @@ export async function updateMemeSpam(updates: Partial<BotSettings["memeSpam"]>):
   await saveSettings();
 }
 
+export async function setSportsLeagueChannel(leagueKey: string, channelId: string): Promise<void> {
+  settings.sportsTracker.channels[leagueKey] = channelId;
+  await saveSettings();
+}
+
+export async function removeSportsLeagueChannel(leagueKey: string): Promise<void> {
+  delete settings.sportsTracker.channels[leagueKey];
+  await saveSettings();
+}
+
 export async function updateSportsTracker(
-  updates: Partial<BotSettings["sportsTracker"]>
+  updates: Partial<Omit<BotSettings["sportsTracker"], "channels">>
 ): Promise<void> {
   settings.sportsTracker = { ...settings.sportsTracker, ...updates };
   await saveSettings();

@@ -3,8 +3,9 @@ import {
   ChatInputCommandInteraction,
   PermissionFlagsBits,
   EmbedBuilder,
+  ChannelType,
 } from "discord.js";
-import { getSettings } from "../store.js";
+import { getSettings, setSportsLeagueChannel, removeSportsLeagueChannel } from "../store.js";
 import {
   fetchScores,
   toggleSportsTracker,
@@ -19,12 +20,12 @@ const LEAGUE_CHOICES = Object.entries(LEAGUES).map(([value, info]) => ({
 
 export const data = new SlashCommandBuilder()
   .setName("sports")
-  .setDescription("Sports scores and auto-update controls")
+  .setDescription("Sports scores and per-league channel controls")
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
   .addSubcommand((sub) =>
     sub
       .setName("scores")
-      .setDescription("Get current scores for a league right now")
+      .setDescription("Get current scores for a league right now (posts in this channel)")
       .addStringOption((opt) =>
         opt
           .setName("league")
@@ -35,8 +36,39 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub
+      .setName("setchannel")
+      .setDescription("Assign a channel for a specific league's auto-updates")
+      .addStringOption((opt) =>
+        opt
+          .setName("league")
+          .setDescription("Which league to assign")
+          .setRequired(true)
+          .addChoices(...LEAGUE_CHOICES)
+      )
+      .addChannelOption((opt) =>
+        opt
+          .setName("channel")
+          .setDescription("The channel to post this league's updates in (defaults to current channel)")
+          .addChannelTypes(ChannelType.GuildText)
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("removechannel")
+      .setDescription("Remove a league from auto-updates")
+      .addStringOption((opt) =>
+        opt
+          .setName("league")
+          .setDescription("Which league to remove")
+          .setRequired(true)
+          .addChoices(...LEAGUE_CHOICES)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
       .setName("start")
-      .setDescription("Start auto-posting scores to the sports channel")
+      .setDescription("Start auto-posting scores to each league's assigned channel")
       .addIntegerOption((opt) =>
         opt
           .setName("interval")
@@ -50,96 +82,7 @@ export const data = new SlashCommandBuilder()
     sub.setName("stop").setDescription("Stop auto-posting sports scores")
   )
   .addSubcommand((sub) =>
-    sub
-      .setName("leagues")
-      .setDescription("Choose which leagues are included in auto-updates")
-      .addStringOption((opt) =>
-        opt
-          .setName("nba")
-          .setDescription("Include NBA?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("nfl")
-          .setDescription("Include NFL?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("mlb")
-          .setDescription("Include MLB?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("nhl")
-          .setDescription("Include NHL?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("ncaaf")
-          .setDescription("Include NCAA Football?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("ncaab")
-          .setDescription("Include NCAA Basketball?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("epl")
-          .setDescription("Include English Premier League?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("laliga")
-          .setDescription("Include La Liga?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("bundesliga")
-          .setDescription("Include Bundesliga?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("seriea")
-          .setDescription("Include Serie A?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("ucl")
-          .setDescription("Include UEFA Champions League?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-      .addStringOption((opt) =>
-        opt
-          .setName("mls")
-          .setDescription("Include MLS?")
-          .addChoices({ name: "Yes", value: "yes" }, { name: "No", value: "no" })
-          .setRequired(false)
-      )
-  )
-  .addSubcommand((sub) =>
-    sub.setName("status").setDescription("Check sports tracker status and active leagues")
+    sub.setName("status").setDescription("Show all leagues and their assigned channels")
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -160,31 +103,80 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   await interaction.deferReply({ ephemeral: true });
   const settings = getSettings();
 
+  if (sub === "setchannel") {
+    const leagueKey = interaction.options.getString("league", true);
+    const targetChannel = interaction.options.getChannel("channel") ?? interaction.channel;
+
+    if (!targetChannel) {
+      await interaction.editReply("Could not determine the channel.");
+      return;
+    }
+
+    const info = LEAGUES[leagueKey];
+    await setSportsLeagueChannel(leagueKey, targetChannel.id);
+
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(info?.color ?? 0x5865f2)
+          .setTitle("✅ League Channel Set")
+          .setDescription(
+            `${info?.emoji ?? ""} **${info?.name ?? leagueKey}** updates will now post in <#${targetChannel.id}>`
+          )
+          .setTimestamp(),
+      ],
+    });
+    return;
+  }
+
+  if (sub === "removechannel") {
+    const leagueKey = interaction.options.getString("league", true);
+    const info = LEAGUES[leagueKey];
+    await removeSportsLeagueChannel(leagueKey);
+
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0xed4245)
+          .setTitle("🗑️ League Removed")
+          .setDescription(
+            `${info?.emoji ?? ""} **${info?.name ?? leagueKey}** has been removed from auto-updates.`
+          )
+          .setTimestamp(),
+      ],
+    });
+    return;
+  }
+
   if (sub === "start") {
-    if (!settings.channels.sports) {
+    const leagueChannels = settings.sportsTracker.channels;
+    if (Object.keys(leagueChannels).length === 0) {
       await interaction.editReply(
-        "No sports channel set! Use `/setchannel sports:#your-channel` first."
+        "No league channels set yet! Use `/sports setchannel` to assign a channel to at least one league first."
       );
       return;
     }
-    const interval = interaction.options.getInteger("interval") ?? settings.sportsTracker.intervalMinutes;
+
+    const interval =
+      interaction.options.getInteger("interval") ?? settings.sportsTracker.intervalMinutes;
     await toggleSportsTracker(interaction.client, true, interval);
 
-    const leagueList = settings.sportsTracker.leagues
-      .map((k) => `${LEAGUES[k]?.emoji ?? ""} ${LEAGUES[k]?.name ?? k}`)
-      .join(", ");
+    const leagueList = Object.entries(leagueChannels)
+      .map(([k, chId]) => `${LEAGUES[k]?.emoji ?? ""} **${LEAGUES[k]?.name ?? k}** → <#${chId}>`)
+      .join("\n");
 
-    const embed = new EmbedBuilder()
-      .setColor(0x009c3b)
-      .setTitle("📡 Sports Tracker Started!")
-      .addFields(
-        { name: "Channel", value: `<#${settings.channels.sports}>`, inline: true },
-        { name: "Interval", value: `Every ${interval} minute(s)`, inline: true },
-        { name: "Leagues", value: leagueList || "None selected", inline: false }
-      )
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x009c3b)
+          .setTitle("📡 Sports Tracker Started!")
+          .addFields(
+            { name: "Interval", value: `Every ${interval} minute(s)`, inline: true },
+            { name: "Active Leagues & Channels", value: leagueList, inline: false }
+          )
+          .setTimestamp(),
+      ],
+    });
     return;
   }
 
@@ -202,53 +194,27 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     return;
   }
 
-  if (sub === "leagues") {
-    const allKeys = Object.keys(LEAGUES).filter((k) => k !== "nba2");
-    const currentLeagues = new Set(settings.sportsTracker.leagues);
-
-    for (const key of allKeys) {
-      const val = interaction.options.getString(key);
-      if (val === "yes") currentLeagues.add(key);
-      else if (val === "no") currentLeagues.delete(key);
-    }
-
-    const newLeagues = [...currentLeagues];
-    await toggleSportsTracker(
-      interaction.client,
-      isSportsTrackerActive(),
-      undefined,
-      newLeagues
-    );
-
-    const leagueList = newLeagues
-      .map((k) => `${LEAGUES[k]?.emoji ?? ""} ${LEAGUES[k]?.name ?? k}`)
-      .join("\n") || "None";
-
-    const embed = new EmbedBuilder()
-      .setColor(0x5865f2)
-      .setTitle("✅ Leagues Updated")
-      .addFields({ name: "Active Leagues", value: leagueList })
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
-    return;
-  }
-
   if (sub === "status") {
     const active = isSportsTrackerActive();
-    const leagues = settings.sportsTracker.leagues;
-    const leagueList = leagues
-      .map((k) => `${LEAGUES[k]?.emoji ?? ""} ${LEAGUES[k]?.name ?? k}`)
-      .join("\n") || "None";
+    const leagueChannels = settings.sportsTracker.channels;
+
+    const allLeagueLines = Object.entries(LEAGUES).map(([key, info]) => {
+      const chId = leagueChannels[key];
+      const channelStr = chId ? `<#${chId}>` : "_Not set_";
+      return `${info.emoji} **${info.name}** — ${channelStr}`;
+    });
 
     const embed = new EmbedBuilder()
       .setColor(active ? 0x57f287 : 0xed4245)
       .setTitle("📊 Sports Tracker Status")
       .addFields(
         { name: "Status", value: active ? "🟢 Running" : "🔴 Stopped", inline: true },
-        { name: "Channel", value: settings.channels.sports ? `<#${settings.channels.sports}>` : "Not set", inline: true },
-        { name: "Interval", value: `${settings.sportsTracker.intervalMinutes} minute(s)`, inline: true },
-        { name: "Active Leagues", value: leagueList, inline: false }
+        {
+          name: "Interval",
+          value: `${settings.sportsTracker.intervalMinutes} minute(s)`,
+          inline: true,
+        },
+        { name: "League Channels", value: allLeagueLines.join("\n"), inline: false }
       )
       .setTimestamp();
 
