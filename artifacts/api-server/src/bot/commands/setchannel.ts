@@ -7,59 +7,75 @@ import {
 } from "discord.js";
 import { setChannel } from "../store.js";
 
-const FEATURES = ["media", "meme", "announcements", "rules"] as const;
-type Feature = typeof FEATURES[number];
+export const data = new SlashCommandBuilder()
+  .setName("setchannel")
+  .setDescription("Set one or more feature channels in a single command")
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
+  .addChannelOption((opt) =>
+    opt
+      .setName("media")
+      .setDescription("Channel for media only (auto-deletes non-media messages)")
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(false)
+  )
+  .addChannelOption((opt) =>
+    opt
+      .setName("meme")
+      .setDescription("Channel where the bot posts memes")
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(false)
+  )
+  .addChannelOption((opt) =>
+    opt
+      .setName("announcements")
+      .setDescription("Channel for announcements")
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(false)
+  )
+  .addChannelOption((opt) =>
+    opt
+      .setName("rules")
+      .setDescription("Channel for server rules")
+      .addChannelTypes(ChannelType.GuildText)
+      .setRequired(false)
+  );
 
-const FEATURE_LABELS: Record<Feature, string> = {
+const FEATURE_LABELS: Record<string, string> = {
   media: "📷 Media Channel",
   meme: "😂 Meme Spam Channel",
   announcements: "📢 Announcements Channel",
   rules: "📋 Rules Channel",
 };
 
-export const data = new SlashCommandBuilder()
-  .setName("setchannel")
-  .setDescription("Set a channel for a specific feature")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-  .addStringOption((opt) =>
-    opt
-      .setName("feature")
-      .setDescription("Which feature to set the channel for")
-      .setRequired(true)
-      .addChoices(
-        { name: "Media (auto-delete non-media messages)", value: "media" },
-        { name: "Meme Spam (bot posts memes here)", value: "meme" },
-        { name: "Announcements", value: "announcements" },
-        { name: "Rules", value: "rules" }
-      )
-  )
-  .addChannelOption((opt) =>
-    opt
-      .setName("channel")
-      .setDescription("The channel to set (defaults to current channel)")
-      .addChannelTypes(ChannelType.GuildText)
-      .setRequired(false)
-  );
-
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
 
-  const feature = interaction.options.getString("feature", true) as Feature;
-  const targetChannel = interaction.options.getChannel("channel") ?? interaction.channel;
+  const features = ["media", "meme", "announcements", "rules"] as const;
+  const updates: { feature: string; channelId: string }[] = [];
 
-  if (!targetChannel) {
-    await interaction.editReply("Could not determine the channel.");
+  for (const feature of features) {
+    const channel = interaction.options.getChannel(feature);
+    if (channel) {
+      await setChannel(feature, channel.id);
+      updates.push({ feature, channelId: channel.id });
+    }
+  }
+
+  if (updates.length === 0) {
+    await interaction.editReply(
+      "You didn't provide any channels. Use at least one option, e.g. `/setchannel media:#your-channel`."
+    );
     return;
   }
 
-  await setChannel(feature, targetChannel.id);
-
-  const label = FEATURE_LABELS[feature] ?? feature;
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
-    .setTitle("✅ Channel Set")
-    .setDescription(`${label} has been set to <#${targetChannel.id}>`)
-    .addFields({ name: "Feature", value: label, inline: true })
+    .setTitle("✅ Channels Updated")
+    .setDescription(
+      updates
+        .map((u) => `${FEATURE_LABELS[u.feature] ?? u.feature} → <#${u.channelId}>`)
+        .join("\n")
+    )
     .setTimestamp();
 
   await interaction.editReply({ embeds: [embed] });
