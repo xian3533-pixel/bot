@@ -6,6 +6,7 @@ import * as setchannel from "../commands/setchannel.js";
 import * as announce from "../commands/announce.js";
 import * as setrules from "../commands/setrules.js";
 import * as memespam from "../commands/memespam.js";
+import * as sports from "../commands/sports.js";
 
 const commands: Record<
   string,
@@ -17,6 +18,7 @@ const commands: Record<
   announce,
   setrules,
   memespam,
+  sports,
 };
 
 export async function handleInteractionCreate(interaction: Interaction): Promise<void> {

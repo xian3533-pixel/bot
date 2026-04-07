@@ -10,12 +10,14 @@ import { loadSettings } from "./store.js";
 import { handleMessageCreate } from "./events/messageCreate.js";
 import { handleInteractionCreate } from "./events/interactionCreate.js";
 import { initMemeSpam } from "./memeSpammer.js";
+import { initSportsTracker } from "./sportsTracker.js";
 import * as ping from "./commands/ping.js";
 import * as moderation from "./commands/moderation.js";
 import * as setchannel from "./commands/setchannel.js";
 import * as announce from "./commands/announce.js";
 import * as setrules from "./commands/setrules.js";
 import * as memespam from "./commands/memespam.js";
+import * as sports from "./commands/sports.js";
 
 const COMMANDS = [
   ping.data,
@@ -24,6 +26,7 @@ const COMMANDS = [
   announce.data,
   setrules.data,
   memespam.data,
+  sports.data,
 ];
 
 export async function startBot(): Promise<void> {
@@ -58,6 +61,7 @@ export async function startBot(): Promise<void> {
     }
 
     await initMemeSpam(client);
+    await initSportsTracker(client);
   });
 
   client.on("messageCreate", (message) => {
