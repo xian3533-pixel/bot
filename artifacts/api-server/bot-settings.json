@@ -12,6 +12,13 @@
   "sportsTracker": {
     "active": true,
     "intervalMinutes": 30,
+    "channels": {
+      "nba": "1490918861657215139",
+      "nfl": "1490919082365685983",
+      "wnba": "1490919365485396108",
+      "ncaab": "1490919533068943391",
+      "mlb": "1490920120447537242"
+    },
     "leagues": [
       "nfl",
       "nba",
