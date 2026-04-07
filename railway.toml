@@ -1,7 +1,7 @@
-
 [build]
-cmd = "pnpm install --no-frozen-lockfile && pnpm --filter @workspace/api-server run build"
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
 
-[start]
-cmd = "pnpm --filter @workspace/api-server run start"
-
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
