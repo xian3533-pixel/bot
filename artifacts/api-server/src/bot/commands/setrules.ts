@@ -68,7 +68,14 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     targetChannel = interaction.channel as TextChannel;
   }
 
-  const rawRules = rulesInput.replace(/\\n/g, "\n");
+  const rawRules = rulesInput
+    // support literal \n typed by the user
+    .replace(/\\n/gi, "\n")
+    // re-split numbered lists collapsed by Discord (e.g. "rule 1. next" → split before "1.")
+    .replace(/([^\n])\s+(\d+[\.\)]\s)/g, "$1\n$2")
+    // re-split bullet lists collapsed by Discord (•, -, *)
+    .replace(/([^\n])\s+([•\-\*]\s)/g, "$1\n$2");
+
   const lines = rawRules.split("\n").filter((l) => l.trim().length > 0);
   const formatted = lines.map((line, i) => `**${i + 1}.** ${line.trim()}`).join("\n\n");
 
