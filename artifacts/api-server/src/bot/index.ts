@@ -18,6 +18,7 @@ import * as announce from "./commands/announce.js";
 import * as setrules from "./commands/setrules.js";
 import * as memespam from "./commands/memespam.js";
 import * as sports from "./commands/sports.js";
+import * as giveaway from "./commands/giveaway.js";
 
 const COMMANDS = [
   ping.data,
@@ -27,6 +28,7 @@ const COMMANDS = [
   setrules.data,
   memespam.data,
   sports.data,
+  giveaway.data,
 ];
 
 export async function startBot(): Promise<void> {

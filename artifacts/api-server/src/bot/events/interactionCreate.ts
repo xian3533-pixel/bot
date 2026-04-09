@@ -7,6 +7,7 @@ import * as announce from "../commands/announce.js";
 import * as setrules from "../commands/setrules.js";
 import * as memespam from "../commands/memespam.js";
 import * as sports from "../commands/sports.js";
+import * as giveaway from "../commands/giveaway.js";
 
 const commands: Record<
   string,
@@ -19,6 +20,7 @@ const commands: Record<
   setrules,
   memespam,
   sports,
+  giveaway,
 };
 
 export async function handleInteractionCreate(interaction: Interaction): Promise<void> {

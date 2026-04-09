@@ -39,6 +39,9 @@ export const data = new SlashCommandBuilder()
   )
   .addStringOption((opt) =>
     opt.setName("title").setDescription("Custom title for the announcement").setRequired(false)
+  )
+  .addChannelOption((opt) =>
+    opt.setName("channel").setDescription("Channel to post in (overrides the saved announcements channel)").setRequired(false)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -47,6 +50,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const message = interaction.options.getString("message", true);
   const themeKey = interaction.options.getString("theme") ?? "default";
   const customTitle = interaction.options.getString("title");
+  const channelOption = interaction.options.getChannel("channel");
   const theme = THEMES[themeKey] ?? THEMES["default"]!;
 
   const settings = getSettings();
@@ -54,7 +58,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   let targetChannel: TextChannel | null = null;
 
-  if (announcementsChannelId) {
+  // If a channel was explicitly passed, use it first
+  if (channelOption) {
+    const ch = await interaction.guild?.channels.fetch(channelOption.id).catch(() => null);
+    if (ch && ch.isTextBased()) {
+      targetChannel = ch as TextChannel;
+    }
+  }
+
+  // Fall back to saved announcements channel, then current channel
+  if (!targetChannel && announcementsChannelId) {
     const ch = await interaction.guild?.channels.fetch(announcementsChannelId).catch(() => null);
     if (ch && ch.isTextBased()) {
       targetChannel = ch as TextChannel;
