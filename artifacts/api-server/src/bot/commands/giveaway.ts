@@ -4,7 +4,10 @@ import {
   PermissionFlagsBits,
   EmbedBuilder,
   TextChannel,
-  GuildMember,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
 } from "discord.js";
 
 export const data = new SlashCommandBuilder()
@@ -37,7 +40,33 @@ export const data = new SlashCommandBuilder()
       .setRequired(false)
   );
 
-const GIVEAWAY_EMOJI = "🎉";
+function buildEmbed(
+  prize: string,
+  endsAtUnix: number,
+  winnerCount: number,
+  hostedBy: string,
+  entrantCount: number,
+  ended = false
+): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(ended ? 0x57f287 : 0xeb459e)
+    .setTitle(ended ? "🎉 Giveaway Ended!" : "🎉 GIVEAWAY 🎉")
+    .setDescription(
+      [
+        `**Prize:** ${prize}`,
+        `**Winners:** ${winnerCount}`,
+        ended
+          ? `**Ended:** <t:${endsAtUnix}:f>`
+          : `**Ends:** <t:${endsAtUnix}:R> (<t:${endsAtUnix}:f>)`,
+        `**Hosted by:** <@${hostedBy}>`,
+        `**Entries:** ${entrantCount}`,
+        "",
+        ended ? "The giveaway has ended." : "Click the button below to enter!",
+      ].join("\n")
+    )
+    .setFooter({ text: ended ? "Giveaway ended" : "Click to enter" })
+    .setTimestamp();
+}
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   await interaction.deferReply({ ephemeral: true });
@@ -62,73 +91,91 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const endsAt = new Date(Date.now() + durationMinutes * 60 * 1000);
   const endsAtUnix = Math.floor(endsAt.getTime() / 1000);
+  const hostId = interaction.user.id;
+  const entrants = new Set<string>();
 
-  const embed = new EmbedBuilder()
-    .setColor(0xeb459e)
-    .setTitle(`${GIVEAWAY_EMOJI} GIVEAWAY ${GIVEAWAY_EMOJI}`)
-    .setDescription(
-      [
-        `**Prize:** ${prize}`,
-        `**Winners:** ${winnerCount}`,
-        `**Ends:** <t:${endsAtUnix}:R> (<t:${endsAtUnix}:f>)`,
-        `**Hosted by:** ${interaction.user}`,
-        "",
-        `React with ${GIVEAWAY_EMOJI} to enter!`,
-      ].join("\n")
-    )
-    .setFooter({ text: `Ends at` })
-    .setTimestamp(endsAt);
+  const enterButton = new ButtonBuilder()
+    .setCustomId("giveaway_enter")
+    .setLabel("🎉 Enter Giveaway")
+    .setStyle(ButtonStyle.Primary);
 
-  const giveawayMessage = await targetChannel.send({ embeds: [embed] });
-  await giveawayMessage.react(GIVEAWAY_EMOJI);
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(enterButton);
+
+  const giveawayMessage = await targetChannel.send({
+    embeds: [buildEmbed(prize, endsAtUnix, winnerCount, hostId, 0)],
+    components: [row],
+  });
 
   await interaction.editReply(
     `✅ Giveaway started in <#${targetChannel.id}>! It ends <t:${endsAtUnix}:R>.`
   );
 
-  setTimeout(async () => {
-    try {
-      const fetched = await giveawayMessage.fetch();
-      const reaction = fetched.reactions.cache.get(GIVEAWAY_EMOJI);
+  const collector = giveawayMessage.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    time: durationMinutes * 60 * 1000,
+  });
 
-      if (!reaction) {
-        await targetChannel.send(`${GIVEAWAY_EMOJI} The **${prize}** giveaway ended with no entries.`);
-        return;
-      }
+  collector.on("collect", async (btnInteraction) => {
+    if (btnInteraction.customId !== "giveaway_enter") return;
 
-      const users = await reaction.users.fetch();
-      const entries = users.filter((u) => !u.bot);
-
-      if (entries.size === 0) {
-        await targetChannel.send(`${GIVEAWAY_EMOJI} The **${prize}** giveaway ended with no valid entries.`);
-        return;
-      }
-
-      const entryArray = [...entries.values()];
-      const shuffled = entryArray.sort(() => Math.random() - 0.5);
-      const winners = shuffled.slice(0, Math.min(winnerCount, entryArray.length));
-      const winnerMentions = winners.map((u) => `<@${u.id}>`).join(", ");
-
-      const endEmbed = new EmbedBuilder()
-        .setColor(0x57f287)
-        .setTitle(`${GIVEAWAY_EMOJI} Giveaway Ended!`)
-        .setDescription(
-          [
-            `**Prize:** ${prize}`,
-            `**Winner${winners.length > 1 ? "s" : ""}:** ${winnerMentions}`,
-            `**Hosted by:** <@${interaction.user.id}>`,
-          ].join("\n")
-        )
-        .setTimestamp();
-
-      await giveawayMessage.edit({ embeds: [endEmbed] });
-      await targetChannel.send(
-        `${GIVEAWAY_EMOJI} Congratulations ${winnerMentions}! You won **${prize}**!`
-      );
-    } catch {
-      await targetChannel
-        .send(`${GIVEAWAY_EMOJI} The **${prize}** giveaway has ended but I couldn't determine a winner.`)
-        .catch(() => null);
+    if (entrants.has(btnInteraction.user.id)) {
+      await btnInteraction.reply({
+        content: "You've already entered this giveaway!",
+        ephemeral: true,
+      });
+      return;
     }
-  }, durationMinutes * 60 * 1000);
+
+    entrants.add(btnInteraction.user.id);
+
+    await btnInteraction.reply({
+      content: `🎉 You've entered the **${prize}** giveaway! Good luck!`,
+      ephemeral: true,
+    });
+
+    await giveawayMessage
+      .edit({
+        embeds: [buildEmbed(prize, endsAtUnix, winnerCount, hostId, entrants.size)],
+      })
+      .catch(() => null);
+  });
+
+  collector.on("end", async () => {
+    const disabledButton = ButtonBuilder.from(enterButton)
+      .setDisabled(true)
+      .setLabel("🎉 Giveaway Ended");
+
+    const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(disabledButton);
+
+    if (entrants.size === 0) {
+      await giveawayMessage
+        .edit({
+          embeds: [buildEmbed(prize, endsAtUnix, winnerCount, hostId, 0, true)],
+          components: [disabledRow],
+        })
+        .catch(() => null);
+      await targetChannel
+        .send(`🎉 The **${prize}** giveaway ended with no entries.`)
+        .catch(() => null);
+      return;
+    }
+
+    const entryArray = [...entrants];
+    const shuffled = entryArray.sort(() => Math.random() - 0.5);
+    const winners = shuffled.slice(0, Math.min(winnerCount, entryArray.length));
+    const winnerMentions = winners.map((id) => `<@${id}>`).join(", ");
+
+    await giveawayMessage
+      .edit({
+        embeds: [buildEmbed(prize, endsAtUnix, winnerCount, hostId, entrants.size, true)],
+        components: [disabledRow],
+      })
+      .catch(() => null);
+
+    await targetChannel
+      .send(
+        `🎉 Congratulations ${winnerMentions}! You won **${prize}**! Thanks to everyone who entered.`
+      )
+      .catch(() => null);
+  });
 }
