@@ -77,7 +77,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .replace(/([^\n])\s+([•\-\*]\s)/g, "$1\n$2");
 
   const lines = rawRules.split("\n").filter((l) => l.trim().length > 0);
-  const formatted = lines.map((line, i) => `**${i + 1}.** ${line.trim()}`).join("\n\n");
+  const formatted = lines.map((line) => line.trim()).join("\n\n");
 
   const title = customTitle ?? `${theme.emoji} Server Rules`;
 
