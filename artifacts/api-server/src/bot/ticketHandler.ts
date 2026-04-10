@@ -48,14 +48,15 @@ export async function handleTicketCreate(interaction: StringSelectMenuInteractio
   const safeName = user.username.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20) || user.id;
   const channelName = `${type}-${safeName}`;
 
-  // Prevent duplicate open tickets of the same type
+  // Prevent any duplicate open ticket (one ticket at a time per user)
+  const allTypes = Object.keys(TICKET_TYPES);
   const existing = guild.channels.cache.find(
-    (ch) => ch.name === channelName && ch.isTextBased()
+    (ch) => allTypes.some((t) => ch.name === `${t}-${safeName}`) && ch.isTextBased()
   );
 
   if (existing) {
     await interaction.editReply(
-      `You already have an open ticket of this type: <#${existing.id}>`
+      `You already have an open ticket: <#${existing.id}>. Please close it before opening a new one.`
     );
     return;
   }
