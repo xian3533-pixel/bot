@@ -42,6 +42,9 @@ export const data = new SlashCommandBuilder()
   )
   .addStringOption((opt) =>
     opt.setName("title").setDescription("Custom title (default: Server Rules)").setRequired(false)
+  )
+  .addAttachmentOption((opt) =>
+    opt.setName("image").setDescription("Image to include with the rules").setRequired(false)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -50,6 +53,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const rulesInput = interaction.options.getString("rules", true);
   const themeKey = interaction.options.getString("theme") ?? "default";
   const customTitle = interaction.options.getString("title");
+  const imageAttachment = interaction.options.getAttachment("image");
   const theme = THEMES[themeKey] ?? THEMES["default"]!;
 
   const settings = getSettings();
@@ -87,6 +91,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setDescription(formatted)
     .setFooter({ text: `${interaction.guild?.name ?? "Server"} — Please follow the rules` })
     .setTimestamp();
+
+  if (imageAttachment && imageAttachment.contentType?.startsWith("image/")) {
+    embed.setImage(imageAttachment.url);
+  }
 
   await targetChannel.send({ embeds: [embed] });
 

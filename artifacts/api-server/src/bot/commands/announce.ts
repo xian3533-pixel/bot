@@ -42,6 +42,9 @@ export const data = new SlashCommandBuilder()
   )
   .addChannelOption((opt) =>
     opt.setName("channel").setDescription("Channel to post in (overrides the saved announcements channel)").setRequired(false)
+  )
+  .addAttachmentOption((opt) =>
+    opt.setName("image").setDescription("Image to include in the announcement").setRequired(false)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -51,6 +54,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const themeKey = interaction.options.getString("theme") ?? "default";
   const customTitle = interaction.options.getString("title");
   const channelOption = interaction.options.getChannel("channel");
+  const imageAttachment = interaction.options.getAttachment("image");
   const theme = THEMES[themeKey] ?? THEMES["default"]!;
 
   const settings = getSettings();
@@ -86,6 +90,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     .setDescription(message)
     .setFooter({ text: `Posted by ${interaction.user.tag}` })
     .setTimestamp();
+
+  if (imageAttachment && imageAttachment.contentType?.startsWith("image/")) {
+    embed.setImage(imageAttachment.url);
+  }
 
   await targetChannel.send({
     content: announcementsChannelId ? `<#${announcementsChannelId}>` : undefined,
