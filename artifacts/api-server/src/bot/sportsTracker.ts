@@ -32,15 +32,35 @@ interface EspnEvent {
   id: string;
   name: string;
   date: string;
-  status: { type: { name: string; shortDetail: string; completed: boolean } };
+  status: { type: { id: string; name: string; shortDetail: string; completed: boolean } };
   competitions: Array<{ competitors: EspnCompetitor[] }>;
+}
+
+// ESPN status type IDs that mean a game is permanently over (Final, Canceled, Forfeit)
+const TERMINAL_STATUS_IDS = new Set(["3", "4", "5"]);
+
+function isTerminalStatus(event: EspnEvent): boolean {
+  return (
+    TERMINAL_STATUS_IDS.has(event.status.type.id) ||
+    event.status.type.completed ||
+    event.status.type.name.includes("FINAL") ||
+    event.status.type.name.includes("CANCELED") ||
+    event.status.type.name.includes("FORFEIT") ||
+    event.status.type.name.includes("POSTPONED")
+  );
 }
 
 interface EspnScoreboard {
   events?: EspnEvent[];
 }
 
-export async function fetchScores(leagueKey: string): Promise<EmbedBuilder | null> {
+interface LeagueData {
+  embed: EmbedBuilder;
+  allTerminal: boolean;
+  hasGames: boolean;
+}
+
+async function fetchLeagueData(leagueKey: string): Promise<LeagueData | null> {
   const info = LEAGUES[leagueKey];
   if (!info) return null;
 
@@ -54,11 +74,15 @@ export async function fetchScores(leagueKey: string): Promise<EmbedBuilder | nul
     const events = data.events ?? [];
 
     if (events.length === 0) {
-      return new EmbedBuilder()
-        .setColor(info.color)
-        .setTitle(`${info.emoji} ${info.name} Scores`)
-        .setDescription("No games scheduled today.")
-        .setTimestamp();
+      return {
+        embed: new EmbedBuilder()
+          .setColor(info.color)
+          .setTitle(`${info.emoji} ${info.name} Scores`)
+          .setDescription("No games scheduled today.")
+          .setTimestamp(),
+        allTerminal: false,
+        hasGames: false,
+      };
     }
 
     const lines: string[] = [];
@@ -94,16 +118,27 @@ export async function fetchScores(leagueKey: string): Promise<EmbedBuilder | nul
       );
     }
 
-    return new EmbedBuilder()
-      .setColor(info.color)
-      .setTitle(`${info.emoji} ${info.name} — Today's Games`)
-      .setDescription(lines.join("\n\n") || "No game data available.")
-      .setFooter({ text: "Powered by ESPN" })
-      .setTimestamp();
+    const allTerminal = events.length > 0 && events.every(isTerminalStatus);
+
+    return {
+      embed: new EmbedBuilder()
+        .setColor(info.color)
+        .setTitle(`${info.emoji} ${info.name} — Today's Games`)
+        .setDescription(lines.join("\n\n") || "No game data available.")
+        .setFooter({ text: "Powered by ESPN" })
+        .setTimestamp(),
+      allTerminal,
+      hasGames: true,
+    };
   } catch (err) {
     logger.error({ err, leagueKey }, "Failed to fetch ESPN scores");
     return null;
   }
+}
+
+export async function fetchScores(leagueKey: string): Promise<EmbedBuilder | null> {
+  const result = await fetchLeagueData(leagueKey);
+  return result?.embed ?? null;
 }
 
 // Per-league independent timers
@@ -121,12 +156,24 @@ async function postLeagueScores(client: Client, leagueKey: string): Promise<void
   const channel = client.channels.cache.get(config.channelId) as TextChannel | undefined;
   if (!channel) return;
 
-  const embed = await fetchScores(leagueKey);
-  if (!embed) return;
+  const result = await fetchLeagueData(leagueKey);
+  if (!result) return;
 
-  await channel.send({ embeds: [embed] }).catch((err: unknown) =>
+  await channel.send({ embeds: [result.embed] }).catch((err: unknown) =>
     logger.error({ err, leagueKey }, "Failed to post league scores")
   );
+
+  // If every game today is in a terminal state, stop the timer automatically
+  if (result.hasGames && result.allTerminal) {
+    logger.info({ leagueKey }, "All games finished — stopping auto-updates for this league");
+    stopLeague(leagueKey);
+    const info = LEAGUES[leagueKey];
+    await channel
+      .send(
+        `✅ All **${info?.name ?? leagueKey}** games for today are final. Auto-updates have been stopped.`
+      )
+      .catch(() => null);
+  }
 }
 
 export function startLeague(client: Client, leagueKey: string, intervalMinutes: number): void {
